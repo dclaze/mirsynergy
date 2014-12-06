@@ -1,0 +1,11 @@
+C:\Development\mirsynergy\mirsynergy\bin\Debug\mirsynergy.exe.config
+C:\Development\mirsynergy\mirsynergy\obj\Debug\mirsynergy.csprojResolveAssemblyReference.cache
+C:\Development\mirsynergy\mirsynergy\bin\Debug\mirsynergy.exe
+C:\Development\mirsynergy\mirsynergy\bin\Debug\mirsynergy.pdb
+C:\Development\mirsynergy\mirsynergy\bin\Debug\MathNet.Numerics.dll
+C:\Development\mirsynergy\mirsynergy\bin\Debug\MathNet.Numerics.xml
+C:\Development\mirsynergy\mirsynergy\obj\Debug\mirsynergy.exe
+C:\Development\mirsynergy\mirsynergy\obj\Debug\mirsynergy.pdb
+C:\Development\Mirsynergy\mirsynergy\bin\Debug\xunit.dll
+C:\Development\Mirsynergy\mirsynergy\bin\Debug\xunit.should.dll
+C:\Development\Mirsynergy\mirsynergy\bin\Debug\xunit.xml
