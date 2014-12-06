@@ -1,5 +1,4 @@
 C:\Development\mirsynergy\mirsynergy\bin\Debug\mirsynergy.exe.config
-C:\Development\mirsynergy\mirsynergy\obj\Debug\mirsynergy.csprojResolveAssemblyReference.cache
 C:\Development\mirsynergy\mirsynergy\bin\Debug\mirsynergy.exe
 C:\Development\mirsynergy\mirsynergy\bin\Debug\mirsynergy.pdb
 C:\Development\mirsynergy\mirsynergy\bin\Debug\MathNet.Numerics.dll
@@ -9,3 +8,11 @@ C:\Development\mirsynergy\mirsynergy\obj\Debug\mirsynergy.pdb
 C:\Development\Mirsynergy\mirsynergy\bin\Debug\xunit.dll
 C:\Development\Mirsynergy\mirsynergy\bin\Debug\xunit.should.dll
 C:\Development\Mirsynergy\mirsynergy\bin\Debug\xunit.xml
+C:\Development\Mirsynergy\mirsynergy\bin\Debug\H.csv
+C:\Development\Mirsynergy\mirsynergy\bin\Debug\Z.csv
+C:\Development\Mirsynergy\mirsynergy\obj\Debug\mirsynergy.csprojResolveAssemblyReference.cache
+C:\Development\Mirsynergy\mirsynergy\bin\Debug\toy_modules_H.csv
+C:\Development\Mirsynergy\mirsynergy\bin\Debug\toy_modules_W.csv
+C:\Development\Mirsynergy\mirsynergy\bin\Debug\Newtonsoft.Json.dll
+C:\Development\Mirsynergy\mirsynergy\bin\Debug\Newtonsoft.Json.xml
+C:\Development\Mirsynergy\mirsynergy\bin\Debug\tcga_brca-H.csv

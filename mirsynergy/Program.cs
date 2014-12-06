@@ -9,79 +9,32 @@ namespace mirsynergy
 {
     class Program
     {
+        private const double OverlapThreshold = 0.8;
+        private const double Density2Threshold = 5e-3;
+        private const double Density1Threshold = 1e-2;
+
         static void Main(string[] args)
         {
-            var expressions = new List<string>();
-            var microRnas = new List<string>();
-
-            var microRnaExpressionsMatrix = DenseMatrix.OfArray(new double[,]
-            {
-                {1.3, 1.1, 1.1},
-                {1.2, 2.1, 7.0},
-                {4.2, 3.2, 2.0}
-            });
-            var lassoScoringMatrix = CalculateLassoAndGetMmiw();
-            var microRnaMicroRnaSynergyScoresMatrix = CalculateMiRnaMiRnaSynergisticScores(microRnaExpressionsMatrix, lassoScoringMatrix);
-
-            //            var geneGeneInteraction = CalculateGeneGeneInteraction();
-            var stage1Clusters = GetStage1Clusters(microRnaMicroRnaSynergyScoresMatrix, microRnas);
-            var finalClusterAssignments = GetFinalClusterAssignments(null);
+            var microRnaSynergyScores = MatrixParser.ParseFromFile("toy_modules_W.csv");
+            var geneGeneSynergyScores = MatrixParser.ParseFromFile("toy_modules_H.csv");
+            var stage1ClustersFromLoadScores = GetStage1Clusters(microRnaSynergyScores.Matrix);
+            var finalClusterAssignmentsFromLoadedScores = GetFinalClusterAssignments(stage1ClustersFromLoadScores, microRnaSynergyScores.Matrix, geneGeneSynergyScores.Matrix);
+            var cytoscapeBuilder = new CytoscapeOutputBuilder();
+            var ctyoscapeOutput = cytoscapeBuilder.Generate(finalClusterAssignmentsFromLoadedScores, microRnaSynergyScores, geneGeneSynergyScores);
+            JsonFileWriter.WriteToFile(ctyoscapeOutput, "output.json");
         }
 
-        private static object GetFinalClusterAssignments(Matrix microRnaMicroRnaSynergyScores)
-        {
-            var clusters = new List<Cluster>();
-            var availableMicroRnas = microRnaMicroRnaSynergyScores.EnumerateRowsIndexed().Select(tuple => tuple.Item1).ToList();
-
-            while (availableMicroRnas.Any())
-            {
-                var microRnaIndexWithMaxSynergyScore = GetMicroRnaWithMaxTotalSynergyScores(microRnaMicroRnaSynergyScores, availableMicroRnas);
-                var currentCluster = new Cluster(microRnaIndexWithMaxSynergyScore);
-                var previousCluster = new Cluster();
-                while (!previousCluster.Equals(currentCluster))
-                {
-                    previousCluster.MicroRnaIndexes = currentCluster.MicroRnaIndexes.ToList();
-
-                    var bestmiRnaNeighbor = ChooseBestNeighboringMicroRna(microRnaMicroRnaSynergyScores, previousCluster);
-                    var bestmiRnaToRemove = ChooseBestMicroRnaToRemove(microRnaMicroRnaSynergyScores, previousCluster);
-
-                    var synergyOfPreviousClusterAndBestNeighbor = GetSynergyScore(microRnaMicroRnaSynergyScores,
-                        previousCluster.MicroRnaIndexes.Concat(new[] { bestmiRnaNeighbor }).ToList());
-                    var synergyOfPreviousCluster = GetSynergyScore(microRnaMicroRnaSynergyScores,
-                        previousCluster.MicroRnaIndexes);
-                    var synergyOfPreviousClusterWitBestRnaRemoved = GetSynergyScore(microRnaMicroRnaSynergyScores,
-                        previousCluster.MicroRnaIndexes.Except(new[] { bestmiRnaToRemove }).ToList());
-
-                    if (synergyOfPreviousClusterAndBestNeighbor >
-                        Math.Max(synergyOfPreviousClusterWitBestRnaRemoved, synergyOfPreviousCluster))
-                    {
-                        currentCluster.ReplaceWith(previousCluster.MicroRnaIndexes.Union(new[] { bestmiRnaNeighbor }));
-                    }
-                    else if (synergyOfPreviousClusterWitBestRnaRemoved >
-                             Math.Max(synergyOfPreviousClusterAndBestNeighbor, synergyOfPreviousCluster))
-                    {
-                        currentCluster.ReplaceWith(previousCluster.MicroRnaIndexes.Except(new[] { bestmiRnaToRemove }));
-                    }
-                }
-                clusters = clusters.Union(new[] { previousCluster }).ToList();
-                availableMicroRnas = availableMicroRnas.Except(new[] { microRnaIndexWithMaxSynergyScore }).ToList();
-            }
-
-            return clusters;
-        }
-
-        private static List<Cluster> GetStage1Clusters(Matrix microRnaMicroRnaSynergyScores, IEnumerable<string> microRnas)
+        private static List<Cluster> GetStage1Clusters(Matrix<double> microRnaMicroRnaSynergyScores)
         {
             var mirmClusters = GrowMirmsByOverlappingNeighborhoodExpansion(microRnaMicroRnaSynergyScores);
-            return MergeMirmsByBreadthFirstSearch(mirmClusters);
+            var mergedMirmClusters = MergeMirmsByBreadthFirstSearch(mirmClusters);
+            return mergedMirmClusters.Where(cluster => ClusterUtilities.Density1(cluster, microRnaMicroRnaSynergyScores) >= Density1Threshold).ToList();
         }
 
-        private static List<Cluster> MergeMirmsByBreadthFirstSearch(List<Cluster> mirmClusters)
+        private static IEnumerable<Cluster> MergeMirmsByBreadthFirstSearch(List<Cluster> mirmClusters)
         {
             var mergedMirms = mirmClusters.ToList();
             var complementMergedMirms = new List<Cluster>();
-            var threshold = 0.8;
-
             foreach (var currentCluster in mirmClusters)
             {
                 var closelyConnectedClusters = new List<Cluster> { currentCluster };
@@ -89,7 +42,7 @@ namespace mirsynergy
 
                 foreach (var otherCluster in mirmClusters.Except(new[] { currentCluster }))
                 {
-                    if (ClusterUtilities.OverlapScore(currentCluster, otherCluster) >= threshold)
+                    if (ClusterUtilities.OverlapScore(currentCluster, otherCluster) >= OverlapThreshold)
                     {
                         closelyConnectedClusters = closelyConnectedClusters.Union(new[] { otherCluster }).ToList();
                         mergedMirms = mergedMirms.Except(new[] { otherCluster }).ToList();
@@ -109,7 +62,21 @@ namespace mirsynergy
             return complementMergedMirms;
         }
 
-        private static List<Cluster> GrowMirmsByOverlappingNeighborhoodExpansion(Matrix microRnaMicroRnaSynergyScores)
+        private static List<Cluster> GetFinalClusterAssignments(IEnumerable<Cluster> stage1Clusters, Matrix<double> geneGeneInteractionSynergyScores, Matrix<double> microRnaSynergyScores)
+        {
+            var clusters = new List<Cluster>();
+            var combinedMicroRnaAndmRnaSynergyScoresMatrix = microRnaSynergyScores.DiagonalStack(geneGeneInteractionSynergyScores);
+
+            foreach (var cluster in stage1Clusters)
+            {
+                var previousCluster = GetNextClusterUsingNeighboringExpansion(combinedMicroRnaAndmRnaSynergyScoresMatrix, cluster, geneGeneInteractionSynergyScores.ColumnCount);
+                clusters = clusters.Union(new[] { previousCluster }).ToList();
+            }
+
+            return clusters.Where(cluster => ClusterUtilities.Density2(cluster, microRnaSynergyScores, geneGeneInteractionSynergyScores)>=Density2Threshold).ToList();
+        }
+
+        private static List<Cluster> GrowMirmsByOverlappingNeighborhoodExpansion(Matrix<double> microRnaMicroRnaSynergyScores)
         {
             var clusters = new List<Cluster>();
             var availableMicroRnas = microRnaMicroRnaSynergyScores.EnumerateRowsIndexed().Select(tuple => tuple.Item1).ToList();
@@ -117,30 +84,30 @@ namespace mirsynergy
             while (availableMicroRnas.Any())
             {
                 var microRnaIndexWithMaxSynergyScore = GetMicroRnaWithMaxTotalSynergyScores(microRnaMicroRnaSynergyScores, availableMicroRnas);
-                var previousCluster = GetNextClusterUsingNeighboringExpansion(microRnaMicroRnaSynergyScores, microRnaIndexWithMaxSynergyScore);
+                var previousCluster = GetNextClusterUsingNeighboringExpansion(microRnaMicroRnaSynergyScores, new Cluster(microRnaIndexWithMaxSynergyScore));
                 clusters = clusters.Union(new[] { previousCluster }).ToList();
-                availableMicroRnas = availableMicroRnas.Except(new[] { microRnaIndexWithMaxSynergyScore }).ToList();
+                availableMicroRnas.Remove(microRnaIndexWithMaxSynergyScore);
             }
 
             return clusters;
         }
 
-        private static Cluster GetNextClusterUsingNeighboringExpansion(Matrix microRnaMicroRnaSynergyScores, int nextMicroRnaIndexSeed)
+        private static Cluster GetNextClusterUsingNeighboringExpansion(Matrix<double> microRnaMicroRnaSynergyScores, Cluster currentCluster, int minumumIndex = 0)
         {
-            var currentCluster = new Cluster(nextMicroRnaIndexSeed);
             var previousCluster = new Cluster();
             while (!previousCluster.Equals(currentCluster))
             {
                 previousCluster.MicroRnaIndexes = currentCluster.MicroRnaIndexes.ToList();
 
-                var bestmiRnaNeighbor = ChooseBestNeighboringMicroRna(microRnaMicroRnaSynergyScores, previousCluster);
-                var bestmiRnaToRemove = ChooseBestMicroRnaToRemove(microRnaMicroRnaSynergyScores, previousCluster);
+                var bestmiRnaNeighbor = ChooseBestNeighboringMicroRna(microRnaMicroRnaSynergyScores, previousCluster, minumumIndex);
+                var synergyOfPreviousClusterAndBestNeighbor = bestmiRnaNeighbor > 0 ? SynergyCalculator.GetSynergyScore(microRnaMicroRnaSynergyScores,
+                    previousCluster.MicroRnaIndexes.Concat(new[] { bestmiRnaNeighbor }).ToList()) : 0;
 
-                var synergyOfPreviousClusterAndBestNeighbor = GetSynergyScore(microRnaMicroRnaSynergyScores,
-                    previousCluster.MicroRnaIndexes.Concat(new[] { bestmiRnaNeighbor }).ToList());
-                var synergyOfPreviousCluster = GetSynergyScore(microRnaMicroRnaSynergyScores, previousCluster.MicroRnaIndexes);
-                var synergyOfPreviousClusterWitBestRnaRemoved = GetSynergyScore(microRnaMicroRnaSynergyScores,
-                    previousCluster.MicroRnaIndexes.Except(new[] { bestmiRnaToRemove }).ToList());
+                var synergyOfPreviousCluster = SynergyCalculator.GetSynergyScore(microRnaMicroRnaSynergyScores, previousCluster.MicroRnaIndexes);
+
+                var bestmiRnaToRemove = ChooseBestIndexToRemove(microRnaMicroRnaSynergyScores, previousCluster, minumumIndex);
+                var synergyOfPreviousClusterWitBestRnaRemoved = bestmiRnaToRemove > 0 ? SynergyCalculator.GetSynergyScore(microRnaMicroRnaSynergyScores,
+                    previousCluster.MicroRnaIndexes.Except(new[] { bestmiRnaToRemove }).ToList()) : 0;
 
                 if (synergyOfPreviousClusterAndBestNeighbor >
                     Math.Max(synergyOfPreviousClusterWitBestRnaRemoved, synergyOfPreviousCluster))
@@ -155,68 +122,40 @@ namespace mirsynergy
             return previousCluster;
         }
 
-        private static int ChooseBestMicroRnaToRemove(Matrix microRnaMicroRnaSynergyScores, Cluster previousCluster)
+        private static int ChooseBestIndexToRemove(Matrix<double> microRnaMicroRnaSynergyScores, Cluster previousCluster, int minumumIndex)
         {
-            var clustersWithOneRemoved = previousCluster.MicroRnaIndexes.ToDictionary(microRnaIndex => microRnaIndex,
+            var clustersWithOneRemoved = previousCluster.MicroRnaIndexes.Where(i => i >= minumumIndex).ToDictionary(microRnaIndex => microRnaIndex,
                 microRnaIndex => previousCluster.MicroRnaIndexes.Except(new[] { microRnaIndex }).ToList());
-
-            return clustersWithOneRemoved.OrderByDescending(pair => GetSynergyScore(microRnaMicroRnaSynergyScores, pair.Value)).First().Key;
+            if (!clustersWithOneRemoved.Any())
+                return -1;
+            return clustersWithOneRemoved.OrderByDescending(pair => SynergyCalculator.GetSynergyScore(microRnaMicroRnaSynergyScores, pair.Value)).First().Key;
         }
 
-        private static int ChooseBestNeighboringMicroRna(Matrix microRnaMicroRnaSynergyScores, Cluster previousCluster)
+        private static int ChooseBestNeighboringMicroRna(Matrix<double> microRnaMicroRnaSynergyScores, Cluster previousCluster, int minumumIndex)
         {
-            var indexesNotIncludedInCluster = GetOtherIndexes(microRnaMicroRnaSynergyScores, previousCluster.MicroRnaIndexes);
-            //            if(indexesNotIncludedInCluster.Any())
-            return indexesNotIncludedInCluster.OrderByDescending(i => GetSynergyScore(microRnaMicroRnaSynergyScores, previousCluster.MicroRnaIndexes.Concat(new[] { i }).ToList())).First();
-        }
-
-        private static double GetSynergyScore(Matrix microRnaMicroRnaSynergyScores, List<int> microRnaIndexes)
-        {
-            //TODO Filter out zero weights
-            var totalWeightsOfInternalEdges = ClusterUtilities.GetWeightsOfInternalEdges(microRnaMicroRnaSynergyScores, microRnaIndexes);
-
-            var totalWeightsOfBoundaryEdges = ClusterUtilities.GetTotalWeightsOfBoundaryEdges(microRnaMicroRnaSynergyScores, microRnaIndexes);
-
-            var penaltyScoreForFormingCluster = GetPenaltyScore(microRnaIndexes);
-
-
-            var numerator = totalWeightsOfInternalEdges;
-            var denomonator = (totalWeightsOfInternalEdges + totalWeightsOfBoundaryEdges + penaltyScoreForFormingCluster);
-            if (numerator == 0 || denomonator == 0)
-                return 0;
-
-            return numerator / denomonator;
+            var indexesNotIncludedInCluster = GetNeighboringIndexes(microRnaMicroRnaSynergyScores, previousCluster.MicroRnaIndexes, minumumIndex);
+            if (!indexesNotIncludedInCluster.Any())
+                return -1;
+            return indexesNotIncludedInCluster.OrderByDescending(i => SynergyCalculator.GetSynergyScore(microRnaMicroRnaSynergyScores, previousCluster.MicroRnaIndexes.Concat(new[] { i }).ToList())).First();
         }
 
 
 
-
-        private static double GetPenaltyScore(IReadOnlyCollection<int> microRnaIndexes)
-        {
-            return 2 * microRnaIndexes.Count;
-        }
-
-
-
-
-
-        private static List<int> GetOtherIndexes(Matrix microRnaMicroRnaSynergyScores, List<int> microRnaIndexes)
+        private static List<int> GetNeighboringIndexes(Matrix<double> microRnaMicroRnaSynergyScores, List<int> microRnaIndexes, int minumumIndex)
         {
             var excludedIndexes = new List<int>();
 
-            for (var externalIndex = 0; externalIndex < microRnaMicroRnaSynergyScores.RowCount; externalIndex++)
+            for (var externalIndex = minumumIndex; externalIndex < microRnaMicroRnaSynergyScores.RowCount; externalIndex++)
             {
                 if (microRnaIndexes.Contains(externalIndex))
                     continue;
-                excludedIndexes.Add(externalIndex);
+                excludedIndexes.AddRange(from microRnaIndex in microRnaIndexes
+                                         where microRnaMicroRnaSynergyScores[microRnaIndex, externalIndex] != 0
+                                         select externalIndex);
             }
 
             return excludedIndexes;
         }
-
-
-
-
 
         private static int GetMicroRnaWithMaxTotalSynergyScores(Matrix<double> microRnaMicroRnaSynergyScores, List<int> availableMicroRnas)
         {
@@ -235,11 +174,6 @@ namespace mirsynergy
             }
 
             return indexOfMicroRnaWithMaxSynergyScore;
-        }
-
-        private static Matrix<double> CalculateGeneGeneInteraction()
-        {
-            throw new NotImplementedException();
         }
 
         private static Matrix CalculateMiRnaMiRnaSynergisticScores(Matrix<double> microRnaExpressions, Matrix<double> lassoScoringMatrix)
@@ -278,17 +212,6 @@ namespace mirsynergy
         {
             return lassoScoringMatrix.RowCount == lassoScoringMatrix.ColumnCount;
         }
-
-        //miRNA-mRNA interaction weight MMIW
-        private static Matrix<double> CalculateLassoAndGetMmiw()
-        {
-            return Matrix<double>.Build.Random(500, 500);
-        }
-    }
-
-    public class MicroRNA
-    {
-        public string Id { get; set; }
     }
 
     public class SquareMatrixOperationAttemptedOnNonSquareMatrix : Exception

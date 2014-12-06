@@ -6,15 +6,18 @@ namespace mirsynergy
 {
     public class Cluster
     {
+        public Guid Id { get; set; }
         public List<int> MicroRnaIndexes { get; set; }
 
         public Cluster()
         {
+            Id = Guid.NewGuid();
             MicroRnaIndexes = new List<int>();
         }
 
         public Cluster(params int[] microRnaIndexWithMaxSynergyScore)
         {
+            Id = Guid.NewGuid();
             MicroRnaIndexes = new List<int>(microRnaIndexWithMaxSynergyScore);
         }
 
@@ -30,7 +33,7 @@ namespace mirsynergy
 
         public override bool Equals(Object obj)
         {
-            var otherCluster = (Cluster) obj;
+            var otherCluster = (Cluster)obj;
             return MicroRnaIndexes.Count == otherCluster.MicroRnaIndexes.Count && !MicroRnaIndexes.Except(otherCluster.MicroRnaIndexes).Any();
         }
 
